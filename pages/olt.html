@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OLT / ONUs — Network Operations Demo</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <h1>OLT / ONUs</h1>
+  <p class="sub" id="sub">Potência óptica recebida em cada ONU, do pior para o melhor.</p>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>ONU</th><th>POP</th><th>IP</th><th>Estado</th><th>Rx (dBm)</th><th>Sinal</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</main>
+<script src="/static/common.js"></script>
+<script>
+const ONU_LABEL = {ok: 'ok', atencao: 'atenção', baixo: 'baixo'};
+async function load() {
+  const d = await api('/api/onus');
+  document.getElementById('sub').textContent =
+    `Potência óptica recebida em cada ONU, do pior para o melhor. Abaixo de ${d.limits.warn} dBm pede atenção; abaixo de ${d.limits.low} dBm é sinal baixo.`;
+  document.getElementById('rows').innerHTML = d.onus.map(o => {
+    // escala visual de -30 dBm (vazio) a -15 dBm (cheio)
+    const w = Math.max(0, Math.min(100, (o.rx_power_dbm + 30) / 15 * 100));
+    const c = o.onu === 'baixo' ? 'var(--bad)' : o.onu === 'atencao' ? 'var(--warn)' : 'var(--ok)';
+    return `<tr><td>${esc(o.name)}</td><td>${esc(o.pop_name)}</td><td>${esc(o.ip)}</td>
+      <td>${pill(o.state, STATE_LABEL[o.state])}</td>
+      <td class="num"><span class="rx"><i style="width:${w}%;background:${c}"></i></span>${o.rx_power_dbm.toFixed(1)}</td>
+      <td>${pill(o.onu, ONU_LABEL[o.onu])}</td></tr>`;
+  }).join('');
+}
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>

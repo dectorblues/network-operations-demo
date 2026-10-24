@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Topologia — Network Operations Demo</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <h1>Topologia</h1>
+  <p class="sub">Como os POPs se ligam. A cor mostra o estado de cada POP e do link que chega nele. Clique num POP para ver os detalhes.</p>
+  <div class="grid cols">
+    <section class="card">
+      <svg class="topo" id="topo" viewBox="0 0 840 450" role="img" aria-label="Diagrama da topologia"></svg>
+      <div class="legend">
+        <span><i style="background:var(--ok)"></i>ok</span>
+        <span><i style="background:var(--warn)"></i>atenção</span>
+        <span><i style="background:var(--bad)"></i>fora</span>
+        <span>linha contínua = fibra · tracejada = rádio</span>
+      </div>
+    </section>
+    <section class="card">
+      <h2 id="dt">Detalhes</h2>
+      <div id="detail" class="small">Clique num POP.</div>
+    </section>
+  </div>
+</main>
+<script src="/static/common.js"></script>
+<script>
+const COLOR = {ok: 'var(--ok)', atencao: 'var(--warn)', fora: 'var(--bad)'};
+let pops = [], devices = [], selected = null;
+
+function draw() {
+  const byId = Object.fromEntries(pops.map(p => [p.id, p]));
+  const links = pops.filter(p => p.parent).map(p => {
+    const a = byId[p.parent];
+    const color = p.status === 'fora' ? COLOR.fora : COLOR[p.status] || COLOR.ok;
+    return `<line x1="${a.x}" y1="${a.y}" x2="${p.x}" y2="${p.y}" stroke="${color}" ${p.link === 'radio' ? 'stroke-dasharray="8 6"' : ''}/>`;
+  }).join('');
+  const nodes = pops.map(p => `
+    <g class="node ${p.status}" data-id="${p.id}" transform="translate(${p.x - 80},${p.y - 30})">
+      <rect width="160" height="60"></rect>
+      <text x="12" y="25">${esc(p.name)}</text>
+      <text class="s" x="12" y="45">${p.availability ?? '—'}% · ${p.up}/${p.total}${p.power === 'bateria' ? ' · bateria' : ''}</text>
+    </g>`).join('');
+  const svg = document.getElementById('topo');
+  svg.innerHTML = links + nodes;
+  svg.querySelectorAll('.node').forEach(n => n.addEventListener('click', () => { selected = n.dataset.id; detail(); }));
+}
+
+function detail() {
+  const p = pops.find(x => x.id === selected);
+  if (!p) return;
+  const items = devices.filter(d => d.pop === p.id);
+  document.getElementById('dt').textContent = p.name;
+  document.getElementById('detail').innerHTML = `
+    <p>Link de entrada: <b>${LINK_LABEL[p.link]}</b>${p.parent ? ` vindo de ${esc((pops.find(x => x.id === p.parent) || {}).name)}` : ''}</p>
+    <div class="table-wrap"><table><tbody>${items.map(d =>
+      `<tr><td>${esc(d.name)}</td><td>${ROLE_LABEL[d.role]}</td><td>${pill(d.state, STATE_LABEL[d.state])}</td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+async function load() {
+  const [t, d] = await Promise.all([api('/api/topology'), api('/api/devices')]);
+  pops = t.pops; devices = d.devices;
+  draw();
+  if (selected) detail();
+}
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>

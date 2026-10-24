@@ -1,0 +1,21 @@
+# ambiente e caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.idea/
+.vscode/
+
+# segredos e dados reais: nunca neste repositório
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.db
+*.sqlite
+certs/
+logs/
+backups/
+users.json

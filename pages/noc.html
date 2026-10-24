@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOC — Network Operations Demo</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <h1>Painel NOC</h1>
+  <p class="sub">Estado da rede agora. Atualiza sozinho a cada 30 segundos.</p>
+
+  <div class="grid kpis" id="kpis"></div>
+
+  <div class="grid cols">
+    <section class="card">
+      <h2>Atenção imediata</h2>
+      <div id="alarms"></div>
+    </section>
+    <section class="card">
+      <h2>Últimos eventos</h2>
+      <ul class="events" id="events"></ul>
+    </section>
+  </div>
+
+  <h2 style="margin-top:20px">POPs</h2>
+  <div class="grid pops" id="pops"></div>
+</main>
+<script src="/static/common.js"></script>
+<script>
+const KIND = {pop_down: 'POP fora', power: 'Energia', stations_down: 'AP sem estações',
+              host_down: 'Equipamento fora', degraded: 'Degradado', no_data: 'Sem coleta'};
+
+function kpi(label, value, cls) {
+  return `<div class="card kpi ${cls}"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+
+async function load() {
+  const d = await api('/api/noc');
+  const s = d.summary;
+  document.getElementById('kpis').innerHTML =
+    kpi('Equipamentos', s.total, '') + kpi('No ar', s.up, 'ok') + kpi('Fora', s.down, s.down ? 'bad' : 'ok') +
+    kpi('Sem coleta', s.unknown, 'unknown') + kpi('Degradados', s.degraded, s.degraded ? 'warn' : 'ok') +
+    kpi('Alarmes', d.alarms.length, d.alarms.length ? 'warn' : 'ok');
+
+  document.getElementById('alarms').innerHTML = d.alarms.length ? d.alarms.map(a =>
+    `<div class="alarm ${a.kind}"><div><div class="t">${esc(a.title)}</div><div class="d">${esc(a.detail)}</div></div>
+     <div class="tag">${KIND[a.kind]}</div></div>`).join('') : '<div class="empty">Nada pedindo atenção.</div>';
+
+  document.getElementById('events').innerHTML = d.events.map(e =>
+    `<li class="${e.resolved ? 'resolved' : ''}"><span class="when">${ago(e.ts, d.now)}</span>
+     <span>${e.resolved ? pill('ok', 'resolvido') : pill(e.severity, SEVERITY[e.severity])} <b>${esc(e.device)}</b> — ${esc(e.text)}</span></li>`).join('');
+
+  document.getElementById('pops').innerHTML = d.pops.map(p => `
+    <div class="card pop ${p.status}">
+      <div class="name"><span>${esc(p.name)}</span>${pill(p.status, {ok: 'ok', atencao: 'atenção', fora: 'fora'}[p.status])}</div>
+      <div class="bar"><i style="width:${p.availability ?? 0}%"></i></div>
+      <div class="small">${p.availability ?? '—'}% no ar · ${p.up}/${p.total} equipamentos${p.unknown ? ` · ${p.unknown} sem coleta` : ''}</div>
+      <div class="small">Link: ${LINK_LABEL[p.link]}${p.power ? ` · energia: ${esc({rede: 'rede', bateria: 'bateria', bateria_critica: 'bateria crítica'}[p.power])}` : ''}</div>
+    </div>`).join('');
+}
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>

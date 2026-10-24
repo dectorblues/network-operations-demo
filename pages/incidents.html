@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ocorrências — Network Operations Demo</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <h1>Ocorrências</h1>
+  <p class="sub">Abrir, assumir, anotar e encerrar um atendimento. Na demonstração tudo fica só na memória e some quando o servidor reinicia.</p>
+  <section class="card" style="margin-bottom:16px">
+    <h2>Nova ocorrência</h2>
+    <form class="row" id="new">
+      <input type="text" id="title" placeholder="O que aconteceu?" required minlength="3" maxlength="120">
+      <select id="pop"><option value="">Sem POP</option></select>
+      <button class="primary">Abrir</button>
+    </form>
+  </section>
+  <div id="list"></div>
+</main>
+<script src="/static/common.js"></script>
+<script>
+let popNames = {};
+
+function card(i) {
+  const notes = i.notes.map(n => `<li>${esc(n.author)}: ${esc(n.text)} <span class="small">(${ago(n.ts)})</span></li>`).join('');
+  const open = i.status !== 'resolvida';
+  return `<div class="inc" data-id="${i.id}">
+    <div class="head"><span class="t">#${i.id} ${esc(i.title)}</span>
+      ${i.pop ? `<span class="small">${esc(popNames[i.pop] || i.pop)}</span>` : ''}
+      ${pill(i.status.replace(' ', '-'), i.status)}
+      <span class="small">aberta há ${ago(i.opened_ts)}${i.owner ? ` · com ${esc(i.owner)}` : ''}</span></div>
+    ${notes ? `<ul class="notes">${notes}</ul>` : ''}
+    ${open ? `<div class="actions">
+      <input type="text" class="note" placeholder="Anotação" maxlength="500">
+      <button data-a="note">Anotar</button>
+      ${i.status === 'aberta' ? '<button data-a="take">Assumir</button>' : ''}
+      <button data-a="close">Encerrar</button></div>` : ''}
+  </div>`;
+}
+
+async function load() {
+  const d = await api('/api/incidents');
+  document.getElementById('list').innerHTML = d.incidents.map(card).join('') || '<div class="empty">Nenhuma ocorrência.</div>';
+}
+
+async function patch(id, body) {
+  await api(`/api/incidents/${id}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  load();
+}
+
+document.getElementById('list').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const box = b.closest('.inc'), id = box.dataset.id;
+  if (b.dataset.a === 'take') patch(id, {status: 'em andamento', owner: 'visitante'});
+  if (b.dataset.a === 'close') patch(id, {status: 'resolvida', note: 'Encerrada pelo visitante.'});
+  if (b.dataset.a === 'note') {
+    const text = box.querySelector('.note').value.trim();
+    if (text) patch(id, {note: text});
+  }
+});
+
+document.getElementById('new').addEventListener('submit', async e => {
+  e.preventDefault();
+  const title = document.getElementById('title').value.trim();
+  const pop = document.getElementById('pop').value || null;
+  await api('/api/incidents', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({title, pop})});
+  document.getElementById('title').value = '';
+  load();
+});
+
+(async () => {
+  const d = await api('/api/devices');
+  d.pops.forEach(p => { popNames[p.id] = p.name; document.getElementById('pop').add(new Option(p.name, p.id)); });
+  load();
+})();
+</script>
+</body>
+</html>

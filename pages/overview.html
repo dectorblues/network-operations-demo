@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visão geral — Network Operations Demo</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main>
+  <h1>Visão geral</h1>
+  <p class="sub">Todos os equipamentos, com filtros. Clique no título de uma coluna para ordenar.</p>
+  <div class="filters">
+    <input type="text" id="q" placeholder="Buscar nome ou IP">
+    <select id="pop"><option value="">Todos os POPs</option></select>
+    <select id="role"><option value="">Todos os tipos</option></select>
+    <select id="state">
+      <option value="">Todos os estados</option><option value="up">No ar</option>
+      <option value="down">Fora</option><option value="unknown">Sem coleta</option>
+    </select>
+  </div>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr>
+        <th data-k="name">Equipamento</th><th data-k="role">Tipo</th><th data-k="pop">POP</th>
+        <th data-k="ip">IP</th><th data-k="state">Estado</th><th data-k="latency_ms">Latência</th>
+        <th data-k="signal_dbm">Sinal</th><th data-k="ccq_pct">CCQ</th><th data-k="rf">Rádio</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p class="small" id="count"></p>
+</main>
+<script src="/static/common.js"></script>
+<script>
+let data = {devices: [], pops: []}, sortKey = 'pop', sortDir = 1;
+const popName = id => (data.pops.find(p => p.id === id) || {}).name || id;
+
+function render() {
+  const q = document.getElementById('q').value.toLowerCase();
+  const pop = document.getElementById('pop').value, role = document.getElementById('role').value;
+  const state = document.getElementById('state').value;
+  const rows = data.devices.filter(d =>
+    (!q || d.name.toLowerCase().includes(q) || d.ip.includes(q)) && (!pop || d.pop === pop) &&
+    (!role || d.role === role) && (!state || d.state === state));
+  rows.sort((a, b) => {
+    const x = a[sortKey] ?? -Infinity, y = b[sortKey] ?? -Infinity;
+    return (x > y ? 1 : x < y ? -1 : 0) * sortDir;
+  });
+  document.getElementById('rows').innerHTML = rows.map(d => `<tr>
+    <td>${esc(d.name)}</td><td>${ROLE_LABEL[d.role]}</td><td>${esc(popName(d.pop))}</td><td>${esc(d.ip)}</td>
+    <td>${pill(d.state, STATE_LABEL[d.state])}</td>
+    <td class="num">${d.latency_ms != null ? d.latency_ms + ' ms' : '—'}</td>
+    <td class="num">${d.signal_dbm != null ? d.signal_dbm + ' dBm' : '—'}</td>
+    <td class="num">${d.ccq_pct != null ? d.ccq_pct + '%' : '—'}</td>
+    <td>${d.rf ? pill(d.rf, RF_LABEL[d.rf]) : '—'}</td></tr>`).join('');
+  document.getElementById('count').textContent = `${rows.length} de ${data.devices.length} equipamentos`;
+}
+
+async function load() {
+  data = await api('/api/devices');
+  const popSel = document.getElementById('pop');
+  if (popSel.options.length === 1) {
+    data.pops.forEach(p => popSel.add(new Option(p.name, p.id)));
+    Object.entries(ROLE_LABEL).forEach(([k, v]) => document.getElementById('role').add(new Option(v, k)));
+  }
+  render();
+}
+document.querySelectorAll('.filters input, .filters select').forEach(el => el.addEventListener('input', render));
+document.querySelectorAll('th[data-k]').forEach(th => th.addEventListener('click', () => {
+  sortDir = sortKey === th.dataset.k ? -sortDir : 1; sortKey = th.dataset.k; render();
+}));
+load(); setInterval(load, 30000);
+</script>
+</body>
+</html>
